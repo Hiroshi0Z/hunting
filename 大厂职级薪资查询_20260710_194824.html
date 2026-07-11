@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>中国互联网大厂分布图 · 猎头工具</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root{--bg:#0b0f1a}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:#d4d8e0}
+
+/* ============= MAP CONTAINER ============= */
+#map{position:absolute;inset:0;z-index:1;background:#0a0d15;will-change:transform;contain:layout style}
+/* Override leaflet default tile loading bg */
+.leaflet-container{background:#0a0d15 !important}
+.leaflet-control-zoom a{background:rgba(14,18,28,.92) !important;color:#d4d8e0 !important;border:1px solid rgba(255,255,255,.08) !important;border-radius:8px !important;width:34px !important;height:34px !important;line-height:34px !important;font-size:16px !important;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.leaflet-control-zoom a:hover{background:rgba(255,255,255,.08) !important}
+.leaflet-control-attribution{background:rgba(14,18,28,.75) !important;color:#4a5568 !important;font-size:9px !important;padding:3px 8px !important;border-radius:4px !important;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.leaflet-control-attribution a{color:#6b7280 !important}
+
+/* ============= HUD ============= */
+.map-hud{position:absolute;top:22px;left:50%;transform:translateX(-50%);z-index:1000;text-align:center;pointer-events:none}
+.map-hud h1{font-size:26px;font-weight:900;letter-spacing:6px;color:#fff}
+.map-hud p{font-size:11px;color:#5a6270;margin-top:6px;letter-spacing:2px}
+
+/* ============= CUSTOM MARKERS ============= */
+.mk-wrap{position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;pointer-events:auto !important;will-change:transform;contain:layout style}
+.mk-wrap *{pointer-events:none}
+.mk-ring{width:44px;height:44px;border-radius:50%;position:relative;display:flex;align-items:center;justify-content:center;transition:all .25s ease;box-shadow:0 0 0 0 var(--c,transparent)}
+.mk-wrap:hover .mk-ring{transform:scale(1.18);box-shadow:0 0 20px 6px color-mix(in srgb,var(--c) 35%,transparent)}
+.mk-logo-bg{width:32px;height:32px;border-radius:50%;background:rgba(10,14,22,.92);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.08);overflow:hidden;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);transition:border-color .25s}
+.mk-wrap:hover .mk-logo-bg{border-color:var(--c)}
+.mk-logo-bg img{width:18px;height:18px;object-fit:contain;transition:transform .25s}
+.mk-wrap:hover .mk-logo-bg img{transform:scale(1.1)}
+.mk-logo-text{font-size:8px;font-weight:700;color:var(--c);display:none;line-height:1}
+.mk-logo-bg.fallback .mk-logo-text{display:block}
+.mk-logo-bg.fallback img{display:none}
+.mk-label{font-size:10px;font-weight:700;color:#c4cdd8;margin-top:5px;text-shadow:0 0 8px rgba(0,0,0,.8);background:rgba(10,14,22,.7);padding:2px 7px;border-radius:5px;white-space:nowrap;transition:all .25s}
+.mk-wrap:hover .mk-label{color:#fff;background:rgba(10,14,22,.92);box-shadow:0 2px 12px rgba(0,0,0,.4)}
+
+
+/* Branch markers - smaller, slightly muted */
+.mk-br .mk-ring{box-shadow:0 0 8px 2px color-mix(in srgb,var(--c) 15%,transparent)}
+.mk-br .mk-logo-bg{border-color:rgba(255,255,255,.04)}
+.mk-br:hover .mk-ring{box-shadow:0 0 14px 4px color-mix(in srgb,var(--c) 25%,transparent)}
+.mk-br .mk-label{font-size:9px;padding:1px 5px;color:#8890a0}
+.mk-br:hover .mk-label{color:#bcc4d0}
+/* ============= BADGE SWIPE ANIMATION ============= */
+#badge-overlay{position:fixed;inset:0;z-index:2000;display:none;background:rgba(8,12,22,.94);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#badge-overlay.active{display:flex;align-items:center;justify-content:center}
+.badge-scene{position:relative;width:380px;height:220px}
+/* reader housing */
+.badge-reader{position:absolute;inset:0;background:rgba(255,255,255,.02);border:2px solid rgba(255,255,255,.06);border-radius:24px;overflow:hidden}
+.badge-reader::before{content:'';position:absolute;left:50%;top:0;bottom:0;width:3px;background:rgba(255,255,255,.04);transform:translateX(-50%)}
+/* reader slot glow */
+.badge-slot{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:280px;height:100px;border:1.5px dashed rgba(255,255,255,.08);border-radius:14px;transition:all .3s}
+.badge-slot.lit{border-color:var(--bc,transparent);box-shadow:0 0 40px color-mix(in srgb,var(--bc) 20%,transparent),inset 0 0 20px color-mix(in srgb,var(--bc) 8%,transparent))}
+/* the badge card */
+.badge-card{position:absolute;top:30px;left:-120px;width:85px;height:120px;background:linear-gradient(145deg,#1a1f30,#0f1320);border:1.5px solid rgba(255,255,255,.1);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.badge-card .bc-icon{font-size:34px}
+.badge-card .bc-name{font-size:10px;font-weight:800;color:#d4d8e0;text-align:center;letter-spacing:1px}
+.badge-card .bc-id{font-size:8px;color:#5a6270;margin-top:2px}
+/* badge swipe animation */
+.badge-card.swipe{animation:swipeBadge 1.3s cubic-bezier(.4,0,.2,1) forwards}
+@keyframes swipeBadge{
+  0%{left:-120px;transform:rotate(-2deg)}
+  25%{left:calc(50% - 42px);transform:rotate(0deg)}
+  45%{left:calc(50% - 42px);transform:rotate(0deg)}
+  90%{left:calc(100% + 20px);transform:rotate(2deg)}
+  100%{left:calc(100% + 20px);transform:rotate(2deg)}
+}
+/* status text */
+.badge-status{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);font-size:12px;font-weight:700;letter-spacing:3px;color:#5a6270;text-align:center;white-space:nowrap}
+.badge-status.ok{color:#10b981;animation:statPop .35s ease}
+@keyframes statPop{from{transform:translateX(-50%) scale(.8);opacity:0}to{transform:translateX(-50%) scale(1);opacity:1}}
+/* company text reveal */
+.badge-company{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) translateY(-65px);font-size:15px;font-weight:800;color:#d4d8e0;opacity:0;text-align:center;transition:opacity .25s}
+.badge-company.show{opacity:1}
+.badge-company .bcc-icon{font-size:36px;display:block;margin-bottom:6px}
+
+/* ============= DETAIL PAGE ============= */
+#pg{position:fixed;inset:0;z-index:1500;display:none;background:var(--bg);overflow-y:auto}
+#pg.active{display:block;animation:fi .35s ease}
+@keyframes fi{from{opacity:0}to{opacity:1}}
+.di{max-width:750px;margin:0 auto;padding:24px 20px 70px;animation:su .45s ease}
+@keyframes su{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
+
+.bf{position:fixed;top:18px;left:18px;z-index:1600;width:42px;height:42px;border-radius:50%;background:rgba(14,18,28,.9);border:1px solid rgba(255,255,255,.1);color:#d4d8e0;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.bf:hover{background:rgba(255,255,255,.08);transform:scale(1.06)}
+
+.dh{text-align:center;padding:50px 20px 30px;position:relative}
+.hr{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,var(--cc) 0%,transparent 70%);opacity:.06;pointer-events:none}
+.hi{font-size:60px;display:block;margin-bottom:16px;position:relative;z-index:1}
+.hc{font-size:28px;font-weight:900;position:relative;z-index:1}
+.ha{font-size:12px;color:#6b7280;margin-top:4px;position:relative;z-index:1}
+.ht{font-size:14px;color:#9ca3af;margin-top:5px;position:relative;z-index:1}
+.hg{max-width:480px;margin:12px auto 0;font-size:13px;color:#6b7280;line-height:1.8;position:relative;z-index:1}
+.hs{display:inline-flex;gap:16px;margin-top:18px;position:relative;z-index:1}
+.hsi{background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:10px 16px;text-align:center}
+.hsi .hn{font-size:20px;font-weight:800;color:var(--cc)}
+.hsi .hl{font-size:9px;color:#6b7280;margin-top:2px}
+
+.st{text-align:center;font-size:11px;letter-spacing:4px;color:#6b7280;margin:36px 0 16px}
+.lt{display:flex;flex-direction:column;gap:8px}
+.lr{display:flex;align-items:stretch;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);border-radius:12px;overflow:hidden;cursor:pointer;transition:all .28s ease}
+.lr:hover{transform:translateX(8px);border-color:var(--cc);box-shadow:0 8px 28px rgba(0,0,0,.35)}
+.lr.sel{border-color:var(--cc);box-shadow:0 0 24px color-mix(in srgb,var(--cc) 18%,transparent);background:color-mix(in srgb,var(--cc) 4%,#0b0f1a)}
+.ll{width:3px;background:var(--cc);flex-shrink:0;transition:width .25s}
+.lr:hover .ll{width:5px}
+.lb{padding:16px 20px;flex:1;display:flex;align-items:center;gap:14px}
+.lbd{background:color-mix(in srgb,var(--cc) 14%,transparent);color:var(--cc);padding:6px 14px;border-radius:8px;font-weight:800;font-size:14px;min-width:68px;text-align:center;transition:all .25s}
+.lr:hover .lbd{background:var(--cc);color:#fff}
+.li{flex:1}
+.li .ltit{font-size:13px;font-weight:600}
+.li .lnt{font-size:11px;color:#9ca3af;margin-top:2px}
+.lsal{text-align:right;font-weight:700;font-size:15px;color:var(--cc);white-space:nowrap}
+.lbar{width:90px;height:3px;background:rgba(255,255,255,.04);border-radius:2px;flex-shrink:0}
+.lbar-f{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--cc),color-mix(in srgb,var(--cc) 55%,#fbbf24));transition:width .5s ease}
+
+.op{display:none;margin-top:22px}
+.op.show{display:block;animation:fi .4s ease}
+.oc{background:linear-gradient(145deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid color-mix(in srgb,var(--cc) 28%,transparent);border-radius:18px;padding:38px 30px;text-align:center;box-shadow:0 20px 56px rgba(0,0,0,.55);position:relative;overflow:hidden}
+.oc::before{content:'';position:absolute;top:-35%;left:-35%;width:170%;height:170%;background:radial-gradient(circle at 35% 28%,color-mix(in srgb,var(--cc) 7%,transparent) 0%,transparent 50%);pointer-events:none}
+.oi{font-size:44px;margin-bottom:18px;position:relative}
+.olab{font-size:10px;letter-spacing:4px;color:#9ca3af;margin-bottom:8px;position:relative}
+.olv{font-size:50px;font-weight:900;margin-bottom:4px;background:linear-gradient(135deg,var(--cc),color-mix(in srgb,var(--cc) 55%,#fbbf24));-webkit-background-clip:text;-webkit-text-fill-color:transparent;position:relative}
+.opos{font-size:15px;color:#d1d5db;margin-bottom:20px;position:relative}
+.ocmp{font-size:18px;font-weight:700;margin-bottom:6px;position:relative}
+.sh{background:rgba(255,255,255,.02);border-radius:14px;padding:22px;margin:18px 0;position:relative}
+.sh .sl{font-size:10px;color:#6b7280;letter-spacing:2px;margin-bottom:6px}
+.sh .sb{font-size:44px;font-weight:900;background:linear-gradient(135deg,#fbbf24,#f59e0b,#ef4444);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sh .sr{font-size:13px;color:#9ca3af;margin-top:4px}
+.dg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px;text-align:left}
+.di2{background:rgba(255,255,255,.012);border-radius:10px;padding:14px 16px}
+.di2 .dl{font-size:10px;color:#6b7280;margin-bottom:4px}
+.di2 .dv{font-size:13px;font-weight:600}
+.ar{display:flex;gap:12px;margin-top:20px;justify-content:center;flex-wrap:wrap}
+.btn{padding:9px 22px;border-radius:22px;font-size:13px;cursor:pointer;font-weight:600;transition:all .15s;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);color:#d4d8e0}
+.btn:hover{background:rgba(255,255,255,.06)}
+.btn.pr{background:var(--cc);color:#fff;border-color:var(--cc)}
+.btn.pr:hover{filter:brightness(1.15)}
+
+/* ============= SEARCH BAR ============= */
+.sb-wrap{position:absolute;top:22px;right:22px;z-index:1000;width:300px}
+.sb-inp{width:100%;padding:10px 16px;border-radius:12px;border:1px solid rgba(200,200,210,.25);background:rgba(255,255,255,.95);color:#1a1a2e;font-size:14px;outline:none;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:border-color .2s,box-shadow .2s}
+.sb-inp:focus{border-color:#60a5fa;box-shadow:0 0 18px rgba(96,165,250,.25)}
+.sb-inp::placeholder{color:#9ca3af}
+.sb-dd{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:rgba(255,255,255,.96);border:1px solid rgba(200,200,210,.25);border-radius:14px;overflow:hidden;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);max-height:420px;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.sb-dd.show{display:block;animation:ddIn .18s ease}
+@keyframes ddIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.sb-item{display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;transition:background .15s;border-bottom:1px solid rgba(0,0,0,.05)}
+.sb-item:hover{background:rgba(96,165,250,.08)}
+.sb-item .sb-ic{font-size:22px;flex-shrink:0}
+.sb-item .sb-nm{font-size:14px;font-weight:700;flex:1;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-item .sb-tg{font-size:10px;color:#9ca3af;flex-shrink:0}
+.sb-item .sb-tg.hq{color:#10b981;font-weight:600}
+.sb-item .sb-tg.br{color:#6b7280}
+.sb-none{padding:16px;text-align:center;color:#9ca3af;font-size:13px}
+
+/* ============= LEVEL COMPARISON TABLE ============= */
+.lc-btn{position:absolute;top:22px;right:334px;z-index:1000;padding:10px 16px;border-radius:12px;border:1px solid rgba(200,200,210,.25);background:rgba(255,255,255,.95);color:#1a1a2e;font-size:14px;cursor:pointer;font-weight:600;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);transition:all .2s}
+.lc-btn:hover{border-color:#60a5fa;box-shadow:0 0 18px rgba(96,165,250,.2)}
+#lc-overlay{position:fixed;inset:0;z-index:3000;display:none;background:rgba(8,12,22,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#lc-overlay.show{display:flex;align-items:center;justify-content:center}
+.lc-panel{background:rgba(255,255,255,.97);border-radius:20px;width:94vw;max-width:1200px;max-height:88vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.lc-head{display:flex;align-items:center;justify-content:space-between;padding:24px 28px 16px}
+.lc-head h2{font-size:20px;font-weight:900;color:#1a1a2e}
+.lc-close{width:36px;height:36px;border-radius:50%;border:1px solid rgba(0,0,0,.08);background:rgba(0,0,0,.02);color:#5a6270;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.lc-close:hover{background:rgba(0,0,0,.06);color:#1a1a2e}
+.lc-scroll{overflow:auto;padding:0 28px 28px}
+.lc-table{width:100%;border-collapse:collapse;font-size:12px;min-width:900px}
+.lc-table th{position:sticky;top:0;background:#f7f8fa;color:#5a6270;font-weight:700;font-size:11px;padding:12px 10px;text-align:center;white-space:nowrap;border-bottom:2px solid #e5e7eb;z-index:1}
+.lc-table th:first-child{text-align:left;padding-left:12px;background:#f7f8fa}
+.lc-table td{padding:11px 10px;text-align:center;border-bottom:1px solid #f0f0f2;white-space:nowrap;color:#374151;font-weight:500;transition:background .15s}
+.lc-table td:first-child{text-align:left;padding-left:12px;font-weight:700;color:#6b7280;font-size:11px;letter-spacing:.5px}
+.lc-table tr:hover td{background:rgba(96,165,250,.04)}
+.lc-table tr:last-child td{border-bottom:none}
+.lc-cell{display:inline-block;padding:4px 10px;border-radius:8px;font-weight:600;font-size:12px}
+.lc-cell .lc-rate{display:block;color:#9ca3af;font-size:10px;font-weight:400;margin-top:1px}
+.lc-tier{font-weight:700;font-size:11px;color:#374151}
+
+@media(max-width:768px){
+  .lc-btn{right:22px;top:70px}
+}
+
+/* ============= COMMENTS SECTION ============= */
+.cm-section{margin-top:42px;padding-top:28px;border-top:1px solid rgba(255,255,255,.06)}
+.cm-title{font-size:11px;letter-spacing:4px;color:#6b7280;text-align:center;margin-bottom:20px}
+.cm-input-wrap{display:flex;gap:10px;margin-bottom:20px}
+.cm-input{flex:1;padding:12px 16px;border-radius:12px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.025);color:#d4d8e0;font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s;font-family:inherit}
+.cm-input:focus{border-color:var(--cc);box-shadow:0 0 16px color-mix(in srgb,var(--cc) 12%,transparent)}
+.cm-input::placeholder{color:#5a6270}
+.cm-send{padding:10px 22px;border-radius:12px;border:1px solid var(--cc);background:color-mix(in srgb,var(--cc) 14%,transparent);color:var(--cc);font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;font-family:inherit}
+.cm-send:hover{background:var(--cc);color:#fff}
+.cm-list{display:flex;flex-direction:column;gap:8px}
+.cm-empty{text-align:center;color:#4a5568;font-size:12px;padding:28px 0}
+.cm-item{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;transition:border-color .2s;animation:cmIn .3s ease}
+.cm-item:hover{border-color:rgba(255,255,255,.08)}
+@keyframes cmIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+.cm-body{flex:1;min-width:0}
+.cm-text{font-size:13px;color:#c4cdd8;line-height:1.6;word-break:break-word}
+.cm-time{font-size:10px;color:#5a6270;margin-top:6px}
+.cm-del{flex-shrink:0;width:26px;height:26px;border-radius:50%;border:1px solid rgba(255,255,255,.06);background:transparent;color:#5a6270;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1}
+.cm-del:hover{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.3);color:#ef4444}
+
+/* ============= CARD STAGGER ENTRANCE ============= */
+.lr{animation:cardIn .45s ease backwards}
+@keyframes cardIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}
+
+@media(max-width:768px){
+  .map-hud h1{font-size:17px;letter-spacing:3px}
+  .hi{font-size:42px}.hc{font-size:22px}
+  .olv{font-size:34px}.sh .sb{font-size:30px}
+  .dg{grid-template-columns:1fr}
+  .lb{flex-wrap:wrap;gap:7px}.lsal{text-align:left}
+  .cm-input-wrap{flex-direction:column}
+}
+</style>
+</head>
+<body>
+
+<!-- ========== HUD ========== -->
+<div class="map-hud">
+  <h1>中国互联网大厂分布图</h1>
+  <p>滚轮缩放 · 拖拽平移 · 搜索直达 · 点击看详情</p>
+</div>
+
+<!-- ========== SEARCH BAR ========== -->
+<div class="sb-wrap">
+  <input class="sb-inp" type="text" placeholder="搜索公司或城市..." id="searchInp" autocomplete="off"
+    oninput="doSearch()" onfocus="doSearch()">
+  <div class="sb-dd" id="searchDD"></div>
+</div>
+
+<!-- ========== LEVEL COMPARE TRIGGER ========== -->
+<button class="lc-btn" onclick="showLevelCompare()">📊 职级对照</button>
+
+<!-- ========== MAP ========== -->
+<div id="map"></div>
+
+<!-- ========== BADGE SWIPE OVERLAY ========== -->
+<div id="badge-overlay">
+  <div class="badge-scene">
+    <div class="badge-reader"></div>
+    <div class="badge-slot"></div>
+    <div class="badge-company">
+      <span class="bcc-icon"></span>
+      <span class="bcc-name"></span>
+    </div>
+    <div class="badge-card">
+      <span class="bc-icon"></span>
+      <span class="bc-name"></span>
+      <span class="bc-id">ID: EMP-0000</span>
+    </div>
+    <div class="badge-status">READY</div>
+  </div>
+</div>
+
+<!-- ========== LEVEL COMPARISON OVERLAY ========== -->
+<div id="lc-overlay">
+  <div class="lc-panel">
+    <div class="lc-head">
+      <h2>📊 大厂职级对照表</h2>
+      <button class="lc-close" onclick="closeLC()">✕</button>
+    </div>
+    <div class="lc-scroll" id="lc-body"></div>
+  </div>
+</div>
+
+<!-- ========== DETAIL PAGE ========== -->
+<div id="pg">
+  <button class="bf" onclick="goBack()">←</button>
+  <div class="di">
+    <div class="dh">
+      <div class="hr"></div>
+      <span class="hi" id="di"></span>
+      <div class="hc" id="dc"></div>
+      <p class="ha" id="da"></p>
+      <p class="ht" id="dt"></p>
+      <p class="hg" id="dg"></p>
+      <div class="hs">
+        <div class="hsi"><div class="hn" id="sn"></div><div class="hl">职级档位</div></div>
+        <div class="hsi"><div class="hn" id="st"></div><div class="hl">顶薪(万)</div></div>
+      </div>
+    </div>
+    <div class="st">▸ 职 级 薪 资 详 情 ◂</div>
+    <div class="lt" id="lt"></div>
+    <div class="op" id="op"><div class="oc" id="oc"></div></div>
+
+    <!-- ========== COMMENTS SECTION ========== -->
+    <div class="cm-section">
+      <div class="cm-title">▸ 评 论 区 ◂</div>
+      <div class="cm-input-wrap">
+        <input class="cm-input" id="cmInput" type="text" placeholder="说点什么..." maxlength="500"
+          onkeydown="if(event.key==='Enter')addComment(curComp,curBranch)">
+        <button class="cm-send" onclick="addComment(curComp,curBranch)">发送</button>
+      </div>
+      <div class="cm-list" id="cmList"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ==================== COMPANY DATA ====================
+const COMPS = [
+  {id:'ali',name:'阿里巴巴',icon:'🐼',color:'#ff6a00',c2:'#ff9a3c',domain:'alibaba.com',slug:'alibabacloud',
+   addr:'余杭区文一西路969号·阿里巴巴西溪园区',latlng:[30.279,120.025],tagline:'让天下没有难做的生意',
+   greet:'阿里总部位于杭州西溪。P7是百万分水岭。',hqCity:'杭州',branches:[{city:'北京',addr:'望京东园四区·阿里中心望京',latlng:[39.998,116.478]},{city:'上海',addr:'徐汇区·阿里上海研发中心',latlng:[31.207,121.611]},{city:'深圳',addr:'南山区后海·阿里中心南山',latlng:[22.518,113.942]}],
+   lvls:[{lv:'P5',t:'工程师',l:41,h:48,n:'校招'},{lv:'P6',t:'高级工程师',l:48,h:64,n:'独立模块'},{lv:'P7',t:'专家/经理',l:91,h:118,n:'★百万分水岭'},{lv:'P8',t:'高级专家',l:170,h:240,n:'带团队'},{lv:'P9',t:'资深专家',l:290,h:380,n:'业务负责人'},{lv:'P10',t:'研究员',l:400,h:500,n:'行业顶尖'}]},
+  {id:'tencent',name:'腾讯',icon:'🐧',color:'#0052d9',c2:'#4da3ff',domain:'tencent.com',slug:'qq',
+   addr:'南山区深南大道10000号·腾讯滨海大厦',latlng:[22.523,113.936],tagline:'用户为本，科技向善',
+   greet:'腾讯总部位于深圳滨海大厦。',hqCity:'深圳',branches:[{city:'北京',addr:'西北旺东路10号·腾讯北京总部',latlng:[40.044,116.283]},{city:'上海',addr:'徐汇漕河泾·腾云大厦',latlng:[31.168,121.399]},{city:'广州',addr:'海珠区琶洲·微信总部',latlng:[23.105,113.366]},{city:'成都',addr:'天府三街198号·腾讯成都大厦',latlng:[30.547,104.066]}],
+   lvls:[{lv:'T4/T5',t:'工程师',l:35,h:50,n:'初入鹅厂'},{lv:'T6/T7',t:'高级工程师',l:60,h:90,n:'独当一面'},{lv:'T8/T9',t:'专家工程师',l:100,h:160,n:'★百万俱乐部'},{lv:'T10',t:'高级专家',l:160,h:250,n:'核心部门'},{lv:'T11',t:'总监',l:250,h:350,n:'技术决策层'}]},
+  {id:'byte',name:'字节跳动',icon:'🎵',color:'#3370ff',c2:'#6b9fff',domain:'bytedance.com',slug:'bytedance',
+   addr:'北三环西路43号·中航广场/方恒时尚中心',latlng:[39.966,116.350],tagline:'Always Day 1',
+   greet:'字节总部位于知春路大钟寺。现金比例行业最高。',hqCity:'北京',branches:[{city:'上海',addr:'杨浦尚浦领世·字节上海',latlng:[31.312,121.510]},{city:'深圳',addr:'南山科技园·字节深圳',latlng:[22.540,113.950]},{city:'杭州',addr:'余杭EFC·字节杭州研发中心',latlng:[30.282,120.025]},{city:'成都',addr:'天府四街OCG·字节成都',latlng:[30.553,104.064]}],
+   lvls:[{lv:'1-2 (L1)',t:'工程师',l:37,h:47,n:'应届/初级'},{lv:'2-1 (L2)',t:'资深工程师',l:53,h:71,n:'1-3年'},{lv:'2-2 (L3)',t:'专家',l:86,h:128,n:'★百万分水岭'},{lv:'3-1 (L4)',t:'高级专家',l:144,h:205,n:'带团队'},{lv:'3-2 (L5)',t:'资深专家',l:250,h:350,n:'核心决策层'}]},
+  {id:'baidu',name:'百度',icon:'🐾',color:'#2932e1',c2:'#5c6bff',domain:'baidu.com',slug:'baidu',
+   addr:'上地十街10号·百度大厦',latlng:[40.057,116.308],tagline:'用科技让复杂世界更简单',
+   greet:'百度大厦毗邻西二旗。AI方向薪资溢价明显。',hqCity:'北京',branches:[{city:'上海',addr:'浦东新区纳贤路701号·百度上海研发中心',latlng:[31.208,121.595]},{city:'深圳',addr:'南山科技园·百度深圳',latlng:[22.540,113.953]}],
+   lvls:[{lv:'T4 (6级)',t:'中级工程师',l:25,h:38,n:'社招起步'},{lv:'T5 (7级)',t:'高级工程师',l:38,h:55,n:'独立负责'},{lv:'T6 (8级)',t:'资深工程师',l:55,h:75,n:'核心骨干'},{lv:'T7 (9级)',t:'技术专家',l:75,h:120,n:'★百万分水岭'},{lv:'T8 (10级)',t:'高级专家',l:120,h:180,n:'带团队'},{lv:'T9 (11级)',t:'资深专家',l:180,h:280,n:'业务负责人'},{lv:'T10 (12级)',t:'研究员',l:280,h:400,n:'行业顶尖'}]},
+  {id:'meituan',name:'美团',icon:'🦘',color:'#ffc300',c2:'#ffda4d',domain:'meituan.com',slug:'meituan',
+   addr:'望京东路4号院·恒电大厦',latlng:[40.009,116.488],tagline:'帮大家吃得更好，生活更好',
+   greet:'美团总部位于望京。L8是百万分水岭。',hqCity:'北京',branches:[{city:'上海',addr:'长宁区古北·美团上海',latlng:[31.224,121.404]},{city:'成都',addr:'天府软件园·美团成都',latlng:[30.547,104.066]}],
+   lvls:[{lv:'L5',t:'工程师',l:35,h:45,n:'初级'},{lv:'L6',t:'高级工程师',l:40,h:53,n:'中坚'},{lv:'L7',t:'资深工程师',l:54,h:75,n:'★'},{lv:'L8',t:'专家',l:74,h:140,n:'核心'},{lv:'L9',t:'高级专家',l:180,h:280,n:''},{lv:'L10',t:'资深专家',l:280,h:400,n:''}]},
+  {id:'jd',name:'京东',icon:'🐶',color:'#e1251b',c2:'#ff4d42',domain:'jd.com',slug:'jd',
+   addr:'亦庄科创十一街18号院·京东总部',latlng:[39.792,116.571],tagline:'多快好省',
+   greet:'京东总部位于亦庄。T7对标阿里P7。',hqCity:'北京',branches:[{city:'上海',addr:'长宁区·京东上海',latlng:[31.228,121.389]},{city:'深圳',addr:'南山区前海·京东深圳',latlng:[22.531,113.893]}],
+   lvls:[{lv:'T5/P5',t:'高级工程师',l:40,h:56,n:''},{lv:'T6/P6',t:'资深工程师',l:56,h:71,n:''},{lv:'T7/P7',t:'技术专家',l:79,h:92,n:'★'},{lv:'T8/P8',t:'高级专家',l:78,h:146,n:''},{lv:'T9/P9',t:'科学家',l:100,h:180,n:''}]},
+  {id:'kuaishou',name:'快手',icon:'📹',color:'#ff4906',c2:'#ff7a47',domain:'kuaishou.com',slug:'kuaishou',
+   addr:'西二旗西路16号·元中心/上地西路6号',latlng:[40.056,116.297],tagline:'拥抱每一种生活',
+   greet:'快手总部位于西二旗。E序列6级单轨职级。E10=百万分水岭。',hqCity:'北京',branches:[{city:'成都',addr:'天府软件园·快手成都',latlng:[30.547,104.068]},{city:'深圳',addr:'南山科技园·快手深圳',latlng:[22.540,113.947]}],
+   lvls:[{lv:'E7',t:'初级工程师',l:40,h:50,monthly:2.8,n:'k2b·年终11.2w'},{lv:'E8',t:'高级工程师',l:44,h:58,monthly:4.4,n:'k3a·月薪4.4w'},{lv:'E9',t:'技术专家',l:56,h:80,monthly:4.7,n:'k3c·股票16w·6年'},{lv:'E10',t:'高级专家',l:96,h:134,monthly:7.2,n:'k4a·股票35w·7年·★过百万'},{lv:'E11',t:'资深专家',l:148,h:185,monthly:6.4,n:'k4b·年终38.4w·股票60w'},{lv:'E12',t:'总监/TVP',l:200,h:260,monthly:8.0,n:'k4c·股票100w·9.5年'}]},
+  {id:'didi',name:'滴滴',icon:'🚗',color:'#ff7a00',c2:'#ffa940',domain:'didiglobal.com',slug:'didi',directLogo:'https://dl.svgcdn.com/svg/arcticons/didi.svg',
+   addr:'东北旺西路8号院·尚东数字山谷',latlng:[40.047,116.289],tagline:'让出行更美好',
+   greet:'滴滴北京位于中关村软件园。D8是百万关口。',hqCity:'北京',branches:[{city:'杭州',addr:'余杭区·滴滴杭州研发中心',latlng:[30.287,120.008]}],
+   lvls:[{lv:'D5',t:'工程师',l:36,h:49,n:''},{lv:'D6',t:'高级工程师',l:40,h:55,n:''},{lv:'D7',t:'资深工程师',l:48,h:72,n:''},{lv:'D8',t:'专家',l:80,h:148,n:'★百万分水岭'},{lv:'D9',t:'高级专家',l:148,h:205,n:''},{lv:'D10',t:'资深专家',l:210,h:300,n:''},{lv:'D11',t:'首席',l:300,h:420,n:''}]},  {id:'huawei',name:'华为',icon:'🚀',color:'#cf0a2c',c2:'#ff4d6a',domain:'huawei.com',slug:'huawei',
+   addr:'龙岗区坂田街道·华为基地',latlng:[22.649,114.063],tagline:'构建万物互联的智能世界',
+   greet:'华为总部位于深圳坂田。17级=百万门槛。',hqCity:'深圳',branches:[{city:'北京',addr:'海淀上地·华为北京研究所',latlng:[40.048,116.303]},{city:'上海',addr:'浦东金桥新金桥路2222号·华为上研所',latlng:[31.268,121.639]},{city:'杭州',addr:'滨江·华为杭州研究所',latlng:[30.190,120.210]},{city:'成都',addr:'高新西区·华为成都研究所',latlng:[30.740,103.942]},{city:'武汉',addr:'光谷·华为武汉研究所',latlng:[30.507,114.398]},{city:'南京',addr:'雨花台区·华为南京研究所',latlng:[31.990,118.760]}],
+   lvls:[{lv:'13',t:'初级工程师',l:23,h:30,n:''},{lv:'14',t:'工程师',l:32,h:40,n:''},{lv:'15',t:'高级工程师',l:40,h:50,n:''},{lv:'16',t:'资深工程师',l:51,h:70,n:''},{lv:'17',t:'专家',l:73,h:100,n:'★百万门槛'},{lv:'18',t:'高级专家',l:107,h:160,n:''},{lv:'19',t:'资深专家',l:180,h:280,n:''}]},
+  {id:'netease',name:'网易',icon:'🐷',color:'#c41230',c2:'#e84057',domain:'163.com',slug:'netease',
+   addr:'天河区科韵路·网易大厦',latlng:[23.126,113.361],tagline:'网聚人的力量',
+   greet:'网易总部位于广州天河。4.2是百万分水岭。',hqCity:'广州',branches:[{city:'杭州',addr:'滨江·网易杭州研发中心',latlng:[30.188,120.192]},{city:'北京',addr:'海淀后厂村·网易北京',latlng:[40.046,116.299]}],
+   lvls:[{lv:'2.3',t:'初级工程师',l:15,h:25,n:'实习/应届'},{lv:'3.1',t:'初级工程师',l:25,h:35,n:'独立执行'},{lv:'3.2',t:'中级工程师',l:35,h:45,n:'子系统设计'},{lv:'3.3',t:'高级工程师',l:45,h:60,n:'架构设计'},{lv:'4.1',t:'资深工程师',l:60,h:80,n:'团队技术负责人'},{lv:'4.2',t:'专家工程师',l:80,h:120,n:'★百万分水岭'},{lv:'4.3',t:'高级专家',l:120,h:180,n:'部门技术规划'},{lv:'5.1',t:'技术总监',l:180,h:300,n:'事业部管理'},{lv:'5.2',t:'高级总监',l:300,h:500,n:'多线技术统筹'},{lv:'5.3',t:'高级副总裁',l:500,h:800,n:'战略决策'}]},
+  {id:'xiaomi',name:'小米',icon:'📱',color:'#ff6900',c2:'#ff9a3c',domain:'mi.com',slug:'xiaomi',
+   addr:'安宁庄路/西二旗中路33号·小米科技园',latlng:[40.050,116.320],tagline:'让每个人都能享受科技的乐趣',
+   greet:'小米总部位于清河。汽车业务薪资有溢价。',hqCity:'北京',branches:[{city:'武汉',addr:'光谷·小米武汉总部',latlng:[30.490,114.500]},{city:'南京',addr:'建邺·小米南京',latlng:[31.995,118.731]}],
+   lvls:[{lv:'13',t:'I3·初级工程师',l:28,h:38,n:''},{lv:'14',t:'I4·工程师',l:30,h:42,n:''},{lv:'15',t:'I5·高级工程师',l:38,h:55,n:''},{lv:'16',t:'I6·资深工程师',l:45,h:65,n:''},{lv:'17',t:'I7·专家',l:65,h:100,n:'★'},{lv:'18',t:'I8·高级专家',l:90,h:150,n:''},{lv:'19',t:'I9·总监',l:150,h:250,n:''}]},  {id:'iqiyi',name:'爱奇艺',icon:'🎬',color:'#00be06',c2:'#40d945',domain:'iqiyi.com',slug:'iqiyi',directLogo:'https://dl.svgcdn.com/svg/arcticons/iqiyi.svg',
+   addr:'海淀北一街·爱奇艺创新大厦',latlng:[39.981,116.312],tagline:'悦享品质',
+   greet:'爱奇艺位于中关村。视频+AI双引擎，职级体系与百度对齐。',hqCity:'北京',branches:[],
+   lvls:[{lv:'P5',t:'中级工程师',l:25,h:38,n:'社招起步'},{lv:'P6',t:'高级工程师',l:38,h:55,n:''},{lv:'P7',t:'专家',l:55,h:75,n:'★分水岭'},{lv:'P8',t:'高级专家',l:75,h:120,n:'带团队'},{lv:'P9',t:'资深专家',l:120,h:180,n:'业务负责人'}]},
+  {id:'ctrip',name:'携程',icon:'✈',color:'#0990de',c2:'#40b8f5',domain:'trip.com',slug:'trip.com',
+   addr:'长宁区金钟路968号·凌空SOHO',latlng:[31.232,121.352],tagline:'携程在手，说走就走',
+   greet:'携程总部位于上海长宁凌空SOHO。L5开始配股，L6迈入管理岗。',hqCity:'上海',branches:[{city:'北京',addr:'海淀中关村·携程北京',latlng:[39.979,116.318]}],
+   lvls:[{lv:'2',t:'初级工程师',l:38,h:45,n:''},{lv:'3',t:'工程师',l:42,h:50,n:''},{lv:'4',t:'高级工程师',l:40,h:50,n:''},{lv:'5',t:'资深工程师',l:80,h:100,n:'★配股·3年'},{lv:'6',t:'技术专家',l:100,h:140,n:'管理岗·7年'},{lv:'7',t:'高级专家',l:170,h:210,n:'百万年薪·14年'},{lv:'8',t:'资深专家',l:220,h:260,n:'总监级·15年'}]},
+  {id:'bilibili',name:'B站',icon:'📺',color:'#fb7299',c2:'#ff8fb5',domain:'bilibili.com',slug:'bilibili',
+   addr:'杨浦区政立路485号·国正中心',latlng:[31.302,121.502],tagline:'哔哩哔哩 - (゜-゜)つロ 干杯~',
+   greet:'B站总部位于上海杨浦五角场。15薪制。',hqCity:'上海',branches:[{city:'北京',addr:'朝阳区·B站北京办公室',latlng:[39.991,116.336]}],
+   lvls:[{lv:'2-1',t:'工程师',l:30,h:45,n:'1-2年'},{lv:'2-2',t:'高级工程师',l:45,h:60,n:'2-4年'},{lv:'3-1',t:'专家',l:75,h:100,n:'5-9年·★'},{lv:'3-2',t:'高级专家',l:100,h:150,n:'带团队'},{lv:'4-1',t:'总监',l:180,h:350,n:'10年+'}]}
+]
+
+let curComp = null;
+let curBranch = null;
+const peerMap = {
+  ali:['P5','P6','P7','P8','P9','P10'],tencent:['T4/T5','T6/T7','T8/T9','T10','T11'],
+  byte:['1-2','2-1','2-2','3-1','3-2'],baidu:['T4','T5','T6','T7','T8','T9','T10'],
+  meituan:['L5','L6','L7','L8','L9','L10'],jd:['T5/P5','T6/P6','T7/P7','T8/P8','T9/P9'],
+  kuaishou:['E7','E8','E9','E10','E11','E12'],didi:['D5','D6','D7','D8','D9','D10','D11'],
+  huawei:['13/14','15/16','17','18','19'],
+  netease:['3.2','3.3','4.1/4.2','4.3/5.1','5.2','5.3'],xiaomi:['13','14/15','16/17','18','19'],
+  iqiyi:['P5','P6','P7','P8','P9'],ctrip:['2','3','4','5','6','7','8'],
+  bilibili:['2-1','2-2','3-1','3-2','4-1']
+}
+
+// ==================== MAP INIT ====================
+const map = L.map('map', {
+  center: [32.0, 113.5],
+  zoom: 6,
+  zoomControl: true,
+  attributionControl: true,
+  doubleClickZoom: true,
+  scrollWheelZoom: true,
+  dragging: true
+});
+
+// CartoDB Dark Matter — real map tiles
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  subdomains: 'abcd',
+  maxZoom: 18,
+  updateWhenIdle: true,
+  updateInterval: 200
+}).addTo(map);
+
+// ==================== ADD MARKERS ====================
+function mkIcon(c) {
+  const siUrl = `https://cdn.simpleicons.org/${c.slug}/${c.color.replace('#','')}`;
+  const fnUrl = c.domain ? `https://api.afmax.cn/so/ico/index.php?r=${c.domain}` : '';
+  const yxUrl = c.domain ? `https://favicon.yandex.net/favicon/${c.domain}` : '';
+  const dUrl = c.directLogo || '';
+  return L.divIcon({
+    className: '',
+    html: `<div class="mk-wrap" style="--c:${c.color}">
+      <div class="mk-ring">
+        <div class="mk-logo-bg">
+          <img src="${siUrl}" alt="${c.name}" data-f="${fnUrl}" data-y="${yxUrl}" data-d="${dUrl}"
+            onerror="let s=this;if(!s.dataset.t1){s.dataset.t1='1';s.src=s.dataset.f||''}else if(!s.dataset.t2){s.dataset.t2='1';s.src=s.dataset.y||''}else if(s.dataset.d&&!s.dataset.t3){s.dataset.t3='1';s.src=s.dataset.d}else{s.onerror=null;s.style.display='none';s.parentElement.classList.add('no-logo')}">
+          <span class="mk-logo-text">${c.name[0]}</span>
+        </div>
+      </div>
+      <div class="mk-label">${c.name}</div>
+    </div>`,
+    iconSize: [48, 64],
+    iconAnchor: [24, 56]
+  });
+}
+
+// ============ BRANCH MARKERS ============
+function mkBranchIcon(c, branchCity) {
+  const siUrl = `https://cdn.simpleicons.org/${c.slug}/${c.color.replace('#','')}`;
+  const fnUrl = c.domain ? `https://api.afmax.cn/so/ico/index.php?r=${c.domain}` : '';
+  const yxUrl = c.domain ? `https://favicon.yandex.net/favicon/${c.domain}` : '';
+  const dUrl = c.directLogo || '';
+  return L.divIcon({
+    className: '',
+    html: `<div class="mk-wrap mk-br" style="--c:${c.color}">
+      <div class="mk-ring" style="width:34px;height:34px">
+        <div class="mk-logo-bg" style="width:24px;height:24px">
+          <img src="${siUrl}" alt="${c.name}" data-f="${fnUrl}" data-y="${yxUrl}" data-d="${dUrl}" style="width:12px;height:12px"
+            onerror="let s=this;if(!s.dataset.t1){s.dataset.t1='1';s.src=s.dataset.f||''}else if(!s.dataset.t2){s.dataset.t2='1';s.src=s.dataset.y||''}else if(s.dataset.d&&!s.dataset.t3){s.dataset.t3='1';s.src=s.dataset.d}else{s.onerror=null;s.style.display='none';s.parentElement.classList.add('no-logo')}">
+          <span class="mk-logo-text">${c.name[0]}</span>
+        </div>
+      </div>
+      <div class="mk-label">${c.name}·${branchCity}</div>
+    </div>`,
+    iconSize: [36, 52],
+    iconAnchor: [18, 46]
+  });
+}
+
+COMPS.forEach(c => {
+  const m = L.marker(c.latlng, {icon: mkIcon(c), interactive: true, bubblingMouseEvents: false}).addTo(map);
+  m.on('click', () => startOnboarding(c));
+  m.on('dblclick', (e) => { L.DomEvent.stop(e); });
+  (c.branches||[]).forEach(b => {
+    const bm = L.marker(b.latlng, {icon: mkBranchIcon(c, b.city), interactive: true, bubblingMouseEvents: false}).addTo(map);
+    bm.on('click', () => startOnboarding(c, b));
+    bm.on('dblclick', (e) => { L.DomEvent.stop(e); });
+  });
+});
+
+// ==================== BADGE SWIPE ONBOARDING ====================
+function startOnboarding(c, branch) {
+  const bo = document.getElementById('badge-overlay');
+  const card = bo.querySelector('.badge-card');
+  const slot = bo.querySelector('.badge-slot');
+  const status = bo.querySelector('.badge-status');
+  const company = bo.querySelector('.badge-company');
+  const label = branch ? (c.name + '·' + branch.city) : c.name;
+  const targetLatlng = branch ? branch.latlng : c.latlng;
+
+  // Reset
+  card.classList.remove('swipe'); slot.classList.remove('lit');
+  status.classList.remove('ok'); status.textContent = 'SCANNING...';
+  company.classList.remove('show');
+  bo.style.setProperty('--bc', c.color);
+  card.querySelector('.bc-icon').textContent = c.icon;
+  card.querySelector('.bc-name').textContent = label;
+  card.querySelector('.bc-id').textContent = 'ID: EMP-' + String(COMPS.indexOf(c) + 1000);
+  company.querySelector('.bcc-icon').textContent = c.icon;
+  company.querySelector('.bcc-name').textContent = label;
+
+  bo.classList.add('active');
+  map.flyTo(targetLatlng, 15, { duration: 0.8 });
+
+  // Phase 1: badge swipes through (0-1.3s)
+  void card.offsetWidth; // force reflow
+  card.classList.add('swipe');
+
+  // Phase 2: slot lights up + status update
+  setTimeout(() => { slot.classList.add('lit'); }, 350);
+  setTimeout(() => {
+    status.textContent = 'ACCESS GRANTED ✓';
+    status.classList.add('ok');
+  }, 750);
+
+  // Phase 3: company name fades in above
+  setTimeout(() => { company.classList.add('show'); }, 850);
+
+  // Phase 4: close overlay → show detail
+  setTimeout(() => {
+    bo.classList.remove('active');
+    showDetail(c.id, branch);
+  }, 1500);
+}
+
+// ==================== SEARCH ====================
+function doSearch() {
+  const q = document.getElementById('searchInp').value.trim().toLowerCase();
+  const dd = document.getElementById('searchDD');
+  if (!q) { dd.classList.remove('show'); return; }
+
+  let results = [];
+
+  COMPS.forEach(c => {
+    const nameMatch = c.name.toLowerCase().includes(q) || c.id.includes(q);
+    const hqCityMatch = c.hqCity && c.hqCity.toLowerCase().includes(q);
+
+    if (nameMatch) {
+      // Add HQ
+      results.push({ comp: c, branch: null, label: c.name, type: 'hq' });
+      // Add all branches (skip if branch city == HQ city)
+      (c.branches||[]).forEach(b => {
+        if (b.city !== c.hqCity) {
+          results.push({ comp: c, branch: b, label: c.name + '·' + b.city, type: 'branch' });
+        }
+      });
+    } else {
+      // Match branch cities
+      (c.branches||[]).forEach(b => {
+        if (b.city.toLowerCase().includes(q) && b.city !== c.hqCity) {
+          results.push({ comp: c, branch: b, label: c.name + '·' + b.city, type: 'branch' });
+        }
+      });
+      // Match HQ city (only if not already matched via name)
+      if (hqCityMatch) {
+        results.push({ comp: c, branch: null, label: c.name, type: 'hq' });
+      }
+    }
+  });
+
+  dd.innerHTML = results.length === 0
+    ? '<div class="sb-none">未找到匹配结果</div>'
+    : results.map(r => `
+      <div class="sb-item" onclick="selectResult('${r.comp.id}', ${r.branch ? "'" + r.branch.city + "'" : 'null'})">
+        <span class="sb-ic">${r.comp.icon}</span>
+        <span class="sb-nm">${r.label}</span>
+        <span class="sb-tg ${r.type}">${r.type === 'hq' ? '总部' : '分公司'}</span>
+      </div>
+    `).join('');
+  dd.classList.add('show');
+}
+
+function selectResult(cid, branchCity) {
+  document.getElementById('searchInp').value = '';
+  document.getElementById('searchDD').classList.remove('show');
+  const c = COMPS.find(x => x.id === cid);
+  if (!c) return;
+  const branch = branchCity ? (c.branches||[]).find(b => b.city === branchCity) : null;
+  startOnboarding(c, branch);
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.sb-wrap')) {
+    document.getElementById('searchDD').classList.remove('show');
+  }
+});
+// ==================== DETAIL PAGE ====================
+function showDetail(cid, branch) {
+  curComp = COMPS.find(x => x.id === cid); if (!curComp) return;
+  curBranch = branch || null;
+  const pg = document.getElementById('pg'), c = curComp;
+  document.getElementById('di').textContent = c.icon;
+  document.getElementById('dc').textContent = branch ? (c.name + '·' + branch.city) : c.name;
+  document.getElementById('da').textContent = branch ? branch.addr : c.addr;
+  document.getElementById('dt').textContent = '— ' + c.tagline;
+  document.getElementById('dg').textContent = c.greet;
+  document.getElementById('sn').textContent = c.lvls.length;
+  document.getElementById('st').textContent = Math.max(...c.lvls.map(l => l.h));
+  pg.style.setProperty('--cc', c.color);
+  const ms = Math.max(...c.lvls.map(l => l.h));
+  document.getElementById('lt').innerHTML = c.lvls.map((l, i) => `
+    <div class="lr" data-ix="${i}" onclick="selLvl(${i})" style="animation-delay:${i*0.06}s">
+      <div class="ll"></div>
+      <div class="lb">
+        <div class="lbd">${l.lv}</div>
+        <div class="li"><div class="ltit">${l.t}</div><div class="lnt">${l.n}</div></div>
+        <div class="lbar"><div class="lbar-f" style="width:${(l.h/ms*100).toFixed(0)}%"></div></div>
+        <div class="lsal">${l.l}-${l.h} 万</div>
+      </div>
+    </div>
+  `).join('');
+  document.getElementById('op').classList.remove('show');
+  document.getElementById('map').style.display = 'none';
+  document.querySelector('.map-hud').style.display = 'none';
+  pg.classList.add('active'); pg.scrollTop = 0;
+
+  // Load comments for this company/branch
+  loadComments(c, branch);
+}
+
+function selLvl(ix) {
+  const c = curComp, l = c.lvls[ix], mid = Math.round((l.l + l.h) / 2);
+  document.querySelectorAll('.lr').forEach(r => r.classList.remove('sel'));
+  document.querySelector(`.lr[data-ix="${ix}"]`)?.classList.add('sel');
+  const peer = (peerMap[c.id] || [])[ix] || '—';
+  document.getElementById('oc').innerHTML = `
+    <div class="oi">📋</div>
+    <div class="olab">OFFER LETTER</div>
+    <div class="ocmp">${c.icon} ${c.name}</div>
+    <div class="olv">${l.lv}</div>
+    <div class="opos">${l.t}</div>
+    <div class="sh"><div class="sl">年 薪 总 包（税前）</div>
+    <div class="sb">${l.l} - ${l.h} 万</div><div class="sr">中位数约 ${mid} 万</div></div>
+    <div class="dg">
+      <div class="di2"><div class="dl">职级定位</div><div class="dv">${l.n}</div></div>
+      <div class="di2"><div class="dl">薪资构成</div><div class="dv">Base + 年终奖 + 股票/期权</div></div>
+      <div class="di2"><div class="dl">对标参考</div><div class="dv">${peer}</div></div>
+      <div class="di2"><div class="dl">月薪估算</div><div class="dv">${l.monthly!==undefined?'<span style="color:#10b981">'+l.monthly.toFixed(1)+'万/月 ✓实际</span>':'约 '+Math.round(l.l*0.7/12)+'k-'+Math.round(l.h*0.7/12)+'k'}</div></div>
+    </div>
+    <div class="ar">
+      <button class="btn" onclick="document.getElementById('op').classList.remove('show');window.scrollTo({top:0,behavior:'smooth'})">← 选其他职级</button>
+      <button class="btn pr" onclick="goBack()">返回地图</button>
+    </div>`;
+  document.getElementById('op').classList.add('show');
+  document.getElementById('op').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+function goBack() {
+  document.getElementById('pg').classList.remove('active');
+  document.getElementById('map').style.display = '';
+  document.querySelector('.map-hud').style.display = '';
+  curComp = null;
+  curBranch = null;
+}
+
+// ==================== COMMENTS ====================
+function getCommentKey(c, branch) {
+  if (!c) return '';
+  return branch ? 'comment_' + c.id + '_' + branch.city : 'comment_' + c.id;
+}
+
+function loadComments(c, branch) {
+  const key = getCommentKey(c, branch);
+  const comments = JSON.parse(localStorage.getItem(key) || '[]');
+  renderComments(comments);
+}
+
+function addComment(c, branch) {
+  if (!c) return;
+  const input = document.getElementById('cmInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const key = getCommentKey(c, branch);
+  const comments = JSON.parse(localStorage.getItem(key) || '[]');
+  const now = new Date();
+  const ts = now.getFullYear() + '-' +
+    String(now.getMonth() + 1).padStart(2, '0') + '-' +
+    String(now.getDate()).padStart(2, '0') + ' ' +
+    String(now.getHours()).padStart(2, '0') + ':' +
+    String(now.getMinutes()).padStart(2, '0') + ':' +
+    String(now.getSeconds()).padStart(2, '0');
+  comments.unshift({ text, ts });
+  localStorage.setItem(key, JSON.stringify(comments));
+  input.value = '';
+  renderComments(comments);
+}
+
+function deleteComment(c, branch, index) {
+  if (!c) return;
+  const key = getCommentKey(c, branch);
+  const comments = JSON.parse(localStorage.getItem(key) || '[]');
+  comments.splice(index, 1);
+  localStorage.setItem(key, JSON.stringify(comments));
+  renderComments(comments);
+}
+
+function renderComments(comments) {
+  const container = document.getElementById('cmList');
+  if (!container) return;
+  if (comments.length === 0) {
+    container.innerHTML = '<div class="cm-empty">暂无评论，快来发表第一条吧</div>';
+    return;
+  }
+  container.innerHTML = comments.map((item, i) => `
+    <div class="cm-item">
+      <div class="cm-body">
+        <div class="cm-text">${escapeHtml(item.text)}</div>
+        <div class="cm-time">${item.ts}</div>
+      </div>
+      <button class="cm-del" onclick="deleteComment(curComp,curBranch,${i})" title="删除">×</button>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ==================== LEVEL COMPARISON TABLE ====================
+const TIER_LABELS = ['初级/新人','中级/主力','高级/骨干','专家','高级专家','资深专家','总监/首席'];
+
+function showLevelCompare(){
+  const maxTiers = Math.max(...Object.values(peerMap).map(a=>a.length));
+  // build header row: Tier | 阿里 | 腾讯 | ...
+  let html = '<table class="lc-table"><thead><tr><th>职级梯队</th>';
+  COMPS.forEach(c => { html += `<th>${c.icon} ${c.name}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  // for each tier, build a row
+  for(let t=0; t<maxTiers; t++){
+    html += `<tr><td class="lc-tier">${TIER_LABELS[t]||'第'+(t+1)+'级'}</td>`;
+    COMPS.forEach(c => {
+      const arr = peerMap[c.id]||[];
+      const lvKey = arr[t];
+      if(!lvKey){ html += '<td style="color:#d1d5db">—</td>'; return; }
+      const searchKey = lvKey.includes('/') ? lvKey.split('/')[0] : lvKey;
+      const lv = (c.lvls||[]).find(l=>l.lv.startsWith(searchKey));
+      if(!lv){ html += `<td>${lvKey}</td>`; return; }
+      const mid = Math.round((lv.l+lv.h)/2);
+      html += `<td><span class="lc-cell" style="background:${c.color}14;color:${c.color}">${lvKey}<span class="lc-rate">${lv.l}-${lv.h}万 · ~${mid}万</span></span></td>`;
+    });
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  document.getElementById('lc-body').innerHTML = html;
+  document.getElementById('lc-overlay').classList.add('show');
+}
+
+function closeLC(){
+  document.getElementById('lc-overlay').classList.remove('show');
+}
+document.getElementById('lc-overlay').addEventListener('click',function(e){if(e.target===this)closeLC();});
+
+// ==================== POLYFILLS ====================
+
+// Invalidate size after load
+window.addEventListener('load', () => { setTimeout(() => map.invalidateSize(), 150); });
+</script>
+</body>
+</html>
